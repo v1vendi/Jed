@@ -3,6 +3,7 @@
   "version": "2.0.0",
   "author": "Ilya Komsa <ilya_komsa@gmail.com>",
   "description": "Gettext Style i18n for Modern JavaScript Apps",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/v1vendi/Jed.git"
@@ -25,5 +26,7 @@
     "babel-jest": "^24.8.0",
     "jest": "^24.8.0"
   },
-  "license": "MIT"
+  "dependencies": {
+    "sprintf-js": "^1.1.2"
+  }
 }
