@@ -1,19 +1,5 @@
 import { sprintf, vsprintf } from 'sprintf-js'
-/*
-Jed offers the entire applicable GNU gettext spec'd set of
-functions, but also offers some nicer wrappers around them.
-The api for gettext was written for a language with no function
-overloading, so Jed allows a little more of that.
 
-Many thanks to Joshua I. Miller - unrtst@cpan.org - who wrote
-gettext.js back in 2008. I was able to vet a lot of my ideas
-against his. I also made sure Jed passed against his tests
-in order to offer easy upgrades -- jsgettext.berlios.de
-*/
-
-const undef = undefined
-
-// Jed is a constructor function
 class Jed {
   constructor(options) {
     // Some minimal defaults
@@ -25,12 +11,9 @@ class Jed {
             "lang": "en",
             "plural_forms": "nplurals=2; plural=(n != 1);"
           }
-          // There are no default keys, though
         }
       },
-      // The default domain if one is missing
       "domain": "messages",
-      // enable debug mode to log untranslated strings to the console
       "debug": false
     };
     // Mix in the sent options with the default options
@@ -46,6 +29,12 @@ class Jed {
   sprintf() {
     return Jed.sprintf.apply(this, arguments);
   }
+  // The gettext spec sets this character as the default
+  // delimiter for context lookups.
+  // e.g.: context\u0004key
+  // If your translation company uses something different,
+  // just change this at any time and it will use that instead.
+  static context_delimiter = String.fromCharCode(4);
   static sprintf(fmt, args) {
     if ({}.toString.call(args) == '[object Array]') {
       return vsprintf(fmt, [].slice.call(args));
@@ -71,8 +60,7 @@ class Jed {
     return this.dcnpgettext.call(this, domain, undefined, key);
   }
 
-  dcgettext(domain, key /*, category */) {
-    // Ignores the category anyways
+  dcgettext(domain, key) {
     return this.dcnpgettext.call(this, domain, undefined, key);
   }
 
@@ -84,7 +72,7 @@ class Jed {
     return this.dcnpgettext.call(this, domain, undefined, skey, pkey, val);
   }
 
-  dcngettext(domain, skey, pkey, val/*, category */) {
+  dcngettext(domain, skey, pkey, val) {
     return this.dcnpgettext.call(this, domain, undefined, skey, pkey, val);
   }
 
@@ -107,19 +95,9 @@ class Jed {
   dnpgettext(domain, context, skey, pkey, val) {
     return this.dcnpgettext.call(this, domain, context, skey, pkey, val);
   }
-
-  // The most fully qualified gettext function. It has every option.
-  // Since it has every option, we can use it from every other method.
-  // This is the bread and butter.
-  // Technically there should be one more argument in this function for 'Category',
-  // but since we never use it, we might as well not waste the bytes to define it.
   dcnpgettext(domain, context, singular_key, plural_key, val) {
-    // Set some defaults
-
     plural_key = plural_key || singular_key;
 
-    // Use the global domain default if one
-    // isn't explicitly passed in
     domain = domain || this._textdomain;
 
     var fallback;
@@ -135,13 +113,12 @@ class Jed {
       return fallback.dcnpgettext.call(fallback, undefined, undefined, singular_key, plural_key, val);
     }
 
-    // No translation data provided
     if (!this.options.locale_data) {
       throw new Error('No locale data provided.');
     }
 
     if (!this.options.locale_data[domain]) {
-      throw new Error('Domain `' + domain + '` was not found.');
+      throw new Error(`Domain "${domain}" was not found.`);
     }
 
     if (!this.options.locale_data[domain][""]) {
@@ -185,7 +162,7 @@ class Jed {
 
     // Throw an error if a domain isn't found
     if (!dict) {
-      throw new Error('No domain named `' + domain + '` could be found.');
+      throw new Error(`No domain named '${domain}' could be found.`);
     }
 
     val_list = dict[key];
@@ -216,13 +193,6 @@ class Jed {
   }
 }
 
-// The gettext spec sets this character as the default
-// delimiter for context lookups.
-// e.g.: context\u0004key
-// If your translation company uses something different,
-// just change this at any time and it will use that instead.
-Jed.context_delimiter = String.fromCharCode(4);
-
 function getPluralFormFunc(plural_form_string) {
   return Jed.PF.compile(plural_form_string || "nplurals=2; plural=(n != 1);");
 }
@@ -246,10 +216,10 @@ class Chain {
     return this;
   }
   fetch(sArr) {
-    if ({}.toString.call(sArr) != '[object Array]') {
+    if (!Array.isArray(sArr)) {
       sArr = [].slice.call(arguments, 0);
     }
-    return (sArr && sArr.length ? Jed.sprintf : function (x) { return x; })(
+    return (sArr && sArr.length ? Jed.sprintf : x => x)(
       this._i18n.dcnpgettext(this._domain, this._context, this._key, this._pkey, this._val),
       sArr
     );
@@ -273,22 +243,18 @@ Jed.PF.parse = function (p) {
   var plural_str = Jed.PF.extractPluralExpr(p);
   return Jed.PF.parser.parse.call(Jed.PF.parser, plural_str);
 };
+// Handle trues and falses as 0 and 1
+function imply(val) {
+  return (val === true ? 1 : val ? val : 0);
+}
 
 Jed.PF.compile = function (p) {
-  // Handle trues and falses as 0 and 1
-  function imply(val) {
-    return (val === true ? 1 : val ? val : 0);
-  }
-
   var ast = Jed.PF.parse(p);
-  return function (n) {
-    return imply(Jed.PF.interpreter(ast)(n));
-  };
+  return (n) => imply(Jed.PF.interpreter(ast)(n));
 };
 
 Jed.PF.interpreter = function (ast) {
   return function (n) {
-    var res;
     switch (ast.type) {
       case 'GROUP':
         return Jed.PF.interpreter(ast.expr)(n);
@@ -370,7 +336,7 @@ Jed.PF.parser = {
   symbols_: { "error": 2, "expressions": 3, "e": 4, "EOF": 5, "?": 6, ":": 7, "||": 8, "&&": 9, "<": 10, "<=": 11, ">": 12, ">=": 13, "!=": 14, "==": 15, "%": 16, "(": 17, ")": 18, "n": 19, "NUMBER": 20, "$accept": 0, "$end": 1 },
   terminals_: { 2: "error", 5: "EOF", 6: "?", 7: ":", 8: "||", 9: "&&", 10: "<", 11: "<=", 12: ">", 13: ">=", 14: "!=", 15: "==", 16: "%", 17: "(", 18: ")", 19: "n", 20: "NUMBER" },
   productions_: [0, [3, 2], [4, 5], [4, 3], [4, 3], [4, 3], [4, 3], [4, 3], [4, 3], [4, 3], [4, 3], [4, 3], [4, 3], [4, 1], [4, 1]],
-  performAction: function anonymous(yytext, yyleng, yylineno, yy, yystate, $$, _$) {
+  performAction: function(yytext, yyleng, yylineno, yy, yystate, $$, _$) {
 
     var $0 = $$.length - 1;
     switch (yystate) {
@@ -406,7 +372,7 @@ Jed.PF.parser = {
   },
   table: [{ 3: 1, 4: 2, 17: [1, 3], 19: [1, 4], 20: [1, 5] }, { 1: [3] }, { 5: [1, 6], 6: [1, 7], 8: [1, 8], 9: [1, 9], 10: [1, 10], 11: [1, 11], 12: [1, 12], 13: [1, 13], 14: [1, 14], 15: [1, 15], 16: [1, 16] }, { 4: 17, 17: [1, 3], 19: [1, 4], 20: [1, 5] }, { 5: [2, 13], 6: [2, 13], 7: [2, 13], 8: [2, 13], 9: [2, 13], 10: [2, 13], 11: [2, 13], 12: [2, 13], 13: [2, 13], 14: [2, 13], 15: [2, 13], 16: [2, 13], 18: [2, 13] }, { 5: [2, 14], 6: [2, 14], 7: [2, 14], 8: [2, 14], 9: [2, 14], 10: [2, 14], 11: [2, 14], 12: [2, 14], 13: [2, 14], 14: [2, 14], 15: [2, 14], 16: [2, 14], 18: [2, 14] }, { 1: [2, 1] }, { 4: 18, 17: [1, 3], 19: [1, 4], 20: [1, 5] }, { 4: 19, 17: [1, 3], 19: [1, 4], 20: [1, 5] }, { 4: 20, 17: [1, 3], 19: [1, 4], 20: [1, 5] }, { 4: 21, 17: [1, 3], 19: [1, 4], 20: [1, 5] }, { 4: 22, 17: [1, 3], 19: [1, 4], 20: [1, 5] }, { 4: 23, 17: [1, 3], 19: [1, 4], 20: [1, 5] }, { 4: 24, 17: [1, 3], 19: [1, 4], 20: [1, 5] }, { 4: 25, 17: [1, 3], 19: [1, 4], 20: [1, 5] }, { 4: 26, 17: [1, 3], 19: [1, 4], 20: [1, 5] }, { 4: 27, 17: [1, 3], 19: [1, 4], 20: [1, 5] }, { 6: [1, 7], 8: [1, 8], 9: [1, 9], 10: [1, 10], 11: [1, 11], 12: [1, 12], 13: [1, 13], 14: [1, 14], 15: [1, 15], 16: [1, 16], 18: [1, 28] }, { 6: [1, 7], 7: [1, 29], 8: [1, 8], 9: [1, 9], 10: [1, 10], 11: [1, 11], 12: [1, 12], 13: [1, 13], 14: [1, 14], 15: [1, 15], 16: [1, 16] }, { 5: [2, 3], 6: [2, 3], 7: [2, 3], 8: [2, 3], 9: [1, 9], 10: [1, 10], 11: [1, 11], 12: [1, 12], 13: [1, 13], 14: [1, 14], 15: [1, 15], 16: [1, 16], 18: [2, 3] }, { 5: [2, 4], 6: [2, 4], 7: [2, 4], 8: [2, 4], 9: [2, 4], 10: [1, 10], 11: [1, 11], 12: [1, 12], 13: [1, 13], 14: [1, 14], 15: [1, 15], 16: [1, 16], 18: [2, 4] }, { 5: [2, 5], 6: [2, 5], 7: [2, 5], 8: [2, 5], 9: [2, 5], 10: [2, 5], 11: [2, 5], 12: [2, 5], 13: [2, 5], 14: [2, 5], 15: [2, 5], 16: [1, 16], 18: [2, 5] }, { 5: [2, 6], 6: [2, 6], 7: [2, 6], 8: [2, 6], 9: [2, 6], 10: [2, 6], 11: [2, 6], 12: [2, 6], 13: [2, 6], 14: [2, 6], 15: [2, 6], 16: [1, 16], 18: [2, 6] }, { 5: [2, 7], 6: [2, 7], 7: [2, 7], 8: [2, 7], 9: [2, 7], 10: [2, 7], 11: [2, 7], 12: [2, 7], 13: [2, 7], 14: [2, 7], 15: [2, 7], 16: [1, 16], 18: [2, 7] }, { 5: [2, 8], 6: [2, 8], 7: [2, 8], 8: [2, 8], 9: [2, 8], 10: [2, 8], 11: [2, 8], 12: [2, 8], 13: [2, 8], 14: [2, 8], 15: [2, 8], 16: [1, 16], 18: [2, 8] }, { 5: [2, 9], 6: [2, 9], 7: [2, 9], 8: [2, 9], 9: [2, 9], 10: [2, 9], 11: [2, 9], 12: [2, 9], 13: [2, 9], 14: [2, 9], 15: [2, 9], 16: [1, 16], 18: [2, 9] }, { 5: [2, 10], 6: [2, 10], 7: [2, 10], 8: [2, 10], 9: [2, 10], 10: [2, 10], 11: [2, 10], 12: [2, 10], 13: [2, 10], 14: [2, 10], 15: [2, 10], 16: [1, 16], 18: [2, 10] }, { 5: [2, 11], 6: [2, 11], 7: [2, 11], 8: [2, 11], 9: [2, 11], 10: [2, 11], 11: [2, 11], 12: [2, 11], 13: [2, 11], 14: [2, 11], 15: [2, 11], 16: [2, 11], 18: [2, 11] }, { 5: [2, 12], 6: [2, 12], 7: [2, 12], 8: [2, 12], 9: [2, 12], 10: [2, 12], 11: [2, 12], 12: [2, 12], 13: [2, 12], 14: [2, 12], 15: [2, 12], 16: [2, 12], 18: [2, 12] }, { 4: 30, 17: [1, 3], 19: [1, 4], 20: [1, 5] }, { 5: [2, 2], 6: [1, 7], 7: [2, 2], 8: [1, 8], 9: [1, 9], 10: [1, 10], 11: [1, 11], 12: [1, 12], 13: [1, 13], 14: [1, 14], 15: [1, 15], 16: [1, 16], 18: [2, 2] }],
   defaultActions: { 6: [2, 1] },
-  parseError(str, hash) {
+  parseError(str) {
     throw new Error(str);
   },
   parse(input) {
@@ -451,7 +417,7 @@ Jed.PF.parser = {
       return token;
     }
 
-    var symbol, preErrorSymbol, state, action, a, r, yyval = {}, p, len, newState, expected;
+    var symbol, preErrorSymbol, state, action, r, yyval = {}, p, len, newState, expected;
     while (true) {
       // retreive state number from top of stack
       state = stack[stack.length - 1];
@@ -467,7 +433,6 @@ Jed.PF.parser = {
       }
 
       // handle parse error
-      _handle_error:
       if (typeof action === 'undefined' || !action.length || !action[0]) {
 
         if (!recovering) {
@@ -484,8 +449,7 @@ Jed.PF.parser = {
               (symbol == 1 /*EOF*/ ? "end of input" :
                 ("'" + (this.terminals_[symbol] || symbol) + "'"));
           }
-          this.parseError(errStr,
-            { text: this.lexer.match, token: this.terminals_[symbol] || symbol, line: this.lexer.yylineno, loc: yyloc, expected: expected });
+          this.parseError(errStr);
         }
 
         // just recovered from another error
@@ -590,8 +554,6 @@ Jed.PF.parser = {
       }
 
     }
-
-    return true;
   },
   lexer: (function () {
 
@@ -717,46 +679,26 @@ Jed.PF.parser = {
         this.begin(condition);
       }
     });
-    lexer.performAction = function anonymous(yy, yy_, $avoiding_name_collisions, YY_START) {
-
-      var YYSTATE = YY_START;
+    lexer.performAction = function(yy, yy_, $avoiding_name_collisions, YY_START) {
       switch ($avoiding_name_collisions) {
-        case 0:/* skip whitespace */
-          break;
+        case 0: return undefined
         case 1: return 20
-          break;
         case 2: return 19
-          break;
         case 3: return 8
-          break;
         case 4: return 9
-          break;
         case 5: return 6
-          break;
         case 6: return 7
-          break;
         case 7: return 11
-          break;
         case 8: return 13
-          break;
         case 9: return 10
-          break;
         case 10: return 12
-          break;
         case 11: return 14
-          break;
         case 12: return 15
-          break;
         case 13: return 16
-          break;
         case 14: return 17
-          break;
         case 15: return 18
-          break;
         case 16: return 5
-          break;
         case 17: return 'INVALID'
-          break;
       }
     };
     lexer.rules = [/^\s+/, /^[0-9]+(\.[0-9]+)?\b/, /^n\b/, /^\|\|/, /^&&/, /^\?/, /^:/, /^<=/, /^>=/, /^</, /^>/, /^!=/, /^==/, /^%/, /^\(/, /^\)/, /^$/, /^./];
