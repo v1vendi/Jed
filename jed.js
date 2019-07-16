@@ -11,201 +11,109 @@ against his. I also made sure Jed passed against his tests
 in order to offer easy upgrades -- jsgettext.berlios.de
 */
 
-// Set up some underscore-style functions, if you already have
-// underscore, feel free to delete this section, and use it
-// directly, however, the amount of functions used doesn't
-// warrant having underscore as a full dependency.
-// Underscore 1.3.0 was used to port and is licensed
-// under the MIT License by Jeremy Ashkenas.
-var ArrayProto = Array.prototype,
-  ObjProto = Object.prototype,
-  slice = ArrayProto.slice,
-  hasOwnProp = ObjProto.hasOwnProperty,
-  nativeForEach = ArrayProto.forEach,
-  breaker = {};
-
 const undef = undefined
 
-// We're not using the OOP style _ so we don't need the
-// extra level of indirection. This still means that you
-// sub out for real `_` though.
-var _ = {
-  forEach: function (obj, iterator, context) {
-    var i, l, key;
-    if (obj === null) {
-      return;
-    }
-
-    if (nativeForEach && obj.forEach === nativeForEach) {
-      obj.forEach(iterator, context);
-    }
-    else if (obj.length === +obj.length) {
-      for (i = 0, l = obj.length; i < l; i++) {
-        if (i in obj && iterator.call(context, obj[i], i, obj) === breaker) {
-          return;
-        }
-      }
-    }
-    else {
-      for (key in obj) {
-        if (hasOwnProp.call(obj, key)) {
-          if (iterator.call(context, obj[key], key, obj) === breaker) {
-            return;
-          }
-        }
-      }
-    }
-  },
-  extend: function (obj) {
-    this.forEach(slice.call(arguments, 1), function (source) {
-      for (var prop in source) {
-        obj[prop] = source[prop];
-      }
-    });
-    return obj;
-  }
-};
-// END Miniature underscore impl
-
 // Jed is a constructor function
-var Jed = function (options) {
-  // Some minimal defaults
-  this.defaults = {
-    "locale_data": {
-      "messages": {
-        "": {
-          "domain": "messages",
-          "lang": "en",
-          "plural_forms": "nplurals=2; plural=(n != 1);"
+class Jed {
+  constructor(options) {
+    // Some minimal defaults
+    this.defaults = {
+      "locale_data": {
+        "messages": {
+          "": {
+            "domain": "messages",
+            "lang": "en",
+            "plural_forms": "nplurals=2; plural=(n != 1);"
+          }
+          // There are no default keys, though
         }
-        // There are no default keys, though
-      }
-    },
-    // The default domain if one is missing
-    "domain": "messages",
-    // enable debug mode to log untranslated strings to the console
-    "debug": false
-  };
-
-  // Mix in the sent options with the default options
-  this.options = _.extend({}, this.defaults, options);
-  this.textdomain(this.options.domain);
-
-  if (options.domain && !this.options.locale_data[this.options.domain]) {
-    throw new Error('Text domain set to non-existent domain: `' + options.domain + '`');
-  }
-};
-
-// The gettext spec sets this character as the default
-// delimiter for context lookups.
-// e.g.: context\u0004key
-// If your translation company uses something different,
-// just change this at any time and it will use that instead.
-Jed.context_delimiter = String.fromCharCode(4);
-
-function getPluralFormFunc(plural_form_string) {
-  return Jed.PF.compile(plural_form_string || "nplurals=2; plural=(n != 1);");
-}
-
-function Chain(key, i18n) {
-  this._key = key;
-  this._i18n = i18n;
-}
-
-// Create a chainable api for adding args prettily
-_.extend(Chain.prototype, {
-  onDomain: function (domain) {
-    this._domain = domain;
-    return this;
-  },
-  withContext: function (context) {
-    this._context = context;
-    return this;
-  },
-  ifPlural: function (num, pkey) {
-    this._val = num;
-    this._pkey = pkey;
-    return this;
-  },
-  fetch: function (sArr) {
-    if ({}.toString.call(sArr) != '[object Array]') {
-      sArr = [].slice.call(arguments, 0);
+      },
+      // The default domain if one is missing
+      "domain": "messages",
+      // enable debug mode to log untranslated strings to the console
+      "debug": false
+    };
+    // Mix in the sent options with the default options
+    this.options = {
+      ...this.defaults,
+      ...options,
+    };
+    this.textdomain(this.options.domain);
+    if (options.domain && !this.options.locale_data[this.options.domain]) {
+      throw new Error('Text domain set to non-existent domain: `' + options.domain + '`');
     }
-    return (sArr && sArr.length ? Jed.sprintf : function (x) { return x; })(
-      this._i18n.dcnpgettext(this._domain, this._context, this._key, this._pkey, this._val),
-      sArr
-    );
   }
-});
-
-// Add functions to the Jed prototype.
-// These will be the functions on the object that's returned
-// from creating a `new Jed()`
-// These seem redundant, but they gzip pretty well.
-_.extend(Jed.prototype, {
-  // The sexier api start point
-  translate: function (key) {
+  sprintf() {
+    return Jed.sprintf.apply(this, arguments);
+  }
+  static sprintf(fmt, args) {
+    if ({}.toString.call(args) == '[object Array]') {
+      return vsprintf(fmt, [].slice.call(args));
+    }
+    return sprintf.apply(this, [].slice.call(arguments));
+  }
+  translate(key) {
     return new Chain(key, this);
-  },
+  }
 
-  textdomain: function (domain) {
+  textdomain(domain) {
     if (!domain) {
       return this._textdomain;
     }
     this._textdomain = domain;
-  },
+  }
 
-  gettext: function (key) {
-    return this.dcnpgettext.call(this, undef, undef, key);
-  },
+  gettext(key) {
+    return this.dcnpgettext.call(this, undefined, undefined, key);
+  }
 
-  dgettext: function (domain, key) {
-    return this.dcnpgettext.call(this, domain, undef, key);
-  },
+  dgettext(domain, key) {
+    return this.dcnpgettext.call(this, domain, undefined, key);
+  }
 
-  dcgettext: function (domain, key /*, category */) {
+  dcgettext(domain, key /*, category */) {
     // Ignores the category anyways
-    return this.dcnpgettext.call(this, domain, undef, key);
-  },
+    return this.dcnpgettext.call(this, domain, undefined, key);
+  }
 
-  ngettext: function (skey, pkey, val) {
-    return this.dcnpgettext.call(this, undef, undef, skey, pkey, val);
-  },
+  ngettext(skey, pkey, val) {
+    return this.dcnpgettext.call(this, undefined, undefined, skey, pkey, val);
+  }
 
-  dngettext: function (domain, skey, pkey, val) {
-    return this.dcnpgettext.call(this, domain, undef, skey, pkey, val);
-  },
+  dngettext(domain, skey, pkey, val) {
+    return this.dcnpgettext.call(this, domain, undefined, skey, pkey, val);
+  }
 
-  dcngettext: function (domain, skey, pkey, val/*, category */) {
-    return this.dcnpgettext.call(this, domain, undef, skey, pkey, val);
-  },
+  dcngettext(domain, skey, pkey, val/*, category */) {
+    return this.dcnpgettext.call(this, domain, undefined, skey, pkey, val);
+  }
 
-  pgettext: function (context, key) {
-    return this.dcnpgettext.call(this, undef, context, key);
-  },
+  pgettext(context, key) {
+    return this.dcnpgettext.call(this, undefined, context, key);
+  }
 
-  dpgettext: function (domain, context, key) {
+  dpgettext(domain, context, key) {
     return this.dcnpgettext.call(this, domain, context, key);
-  },
+  }
 
-  dcpgettext: function (domain, context, key/*, category */) {
+  dcpgettext(domain, context, key) {
     return this.dcnpgettext.call(this, domain, context, key);
-  },
+  }
 
-  npgettext: function (context, skey, pkey, val) {
-    return this.dcnpgettext.call(this, undef, context, skey, pkey, val);
-  },
+  npgettext(context, skey, pkey, val) {
+    return this.dcnpgettext.call(this, undefined, context, skey, pkey, val);
+  }
 
-  dnpgettext: function (domain, context, skey, pkey, val) {
+  dnpgettext(domain, context, skey, pkey, val) {
     return this.dcnpgettext.call(this, domain, context, skey, pkey, val);
-  },
+  }
 
   // The most fully qualified gettext function. It has every option.
   // Since it has every option, we can use it from every other method.
   // This is the bread and butter.
   // Technically there should be one more argument in this function for 'Category',
   // but since we never use it, we might as well not waste the bytes to define it.
-  dcnpgettext: function (domain, context, singular_key, plural_key, val) {
+  dcnpgettext(domain, context, singular_key, plural_key, val) {
     // Set some defaults
 
     plural_key = plural_key || singular_key;
@@ -306,23 +214,47 @@ _.extend(Jed.prototype, {
     }
     return res;
   }
-});
+}
 
-Jed.parse_plural = function (plural_forms, n) {
-  plural_forms = plural_forms.replace(/n/g, n);
-  return Jed.parse_expression(plural_forms);
-};
+// The gettext spec sets this character as the default
+// delimiter for context lookups.
+// e.g.: context\u0004key
+// If your translation company uses something different,
+// just change this at any time and it will use that instead.
+Jed.context_delimiter = String.fromCharCode(4);
 
-Jed.sprintf = function (fmt, args) {
-  if ({}.toString.call(args) == '[object Array]') {
-    return vsprintf(fmt, [].slice.call(args));
+function getPluralFormFunc(plural_form_string) {
+  return Jed.PF.compile(plural_form_string || "nplurals=2; plural=(n != 1);");
+}
+
+class Chain {
+  constructor(key, i18n) {
+    this._key = key;
+    this._i18n = i18n;
   }
-  return sprintf.apply(this, [].slice.call(arguments));
-};
-
-Jed.prototype.sprintf = function () {
-  return Jed.sprintf.apply(this, arguments);
-};
+  onDomain(domain) {
+    this._domain = domain;
+    return this;
+  }
+  withContext(context) {
+    this._context = context;
+    return this;
+  }
+  ifPlural(num, pkey) {
+    this._val = num;
+    this._pkey = pkey;
+    return this;
+  }
+  fetch(sArr) {
+    if ({}.toString.call(sArr) != '[object Array]') {
+      sArr = [].slice.call(arguments, 0);
+    }
+    return (sArr && sArr.length ? Jed.sprintf : function (x) { return x; })(
+      this._i18n.dcnpgettext(this._domain, this._context, this._key, this._pkey, this._val),
+      sArr
+    );
+  }
+}
 
 // Start the Plural forms section
 // This is a full plural form expression parser. It is used to avoid
