@@ -1,14 +1,14 @@
 {
   "name": "jed",
-  "version": "1.1.1",
-  "author": "Alex Sexton <alexsexton@gmail.com>",
+  "version": "2.0.0",
+  "author": "Ilya Komsa <ilya_komsa@gmail.com>",
   "description": "Gettext Style i18n for Modern JavaScript Apps",
   "repository": {
     "type": "git",
-    "url": "https://SlexAxton@github.com/SlexAxton/Jed.git"
+    "url": "https://github.com/v1vendi/Jed.git"
   },
   "scripts": {
-    "test": "make test"
+    "test": "jest"
   },
   "main": "./jed",
   "keywords": [
@@ -17,11 +17,13 @@
     "gettext",
     "internationalization"
   ],
-  "dependencies" : {},
-  "devDependencies" : {
-    "mocha" : "*",
-    "expect.js" : "*",
-    "serve": "*"
+  "devDependencies": {
+    "@babel/core": "^7.5.4",
+    "@babel/preset-env": "^7.5.4",
+    "@types/jest": "^24.0.15",
+    "babel": "^6.23.0",
+    "babel-jest": "^24.8.0",
+    "jest": "^24.8.0"
   },
   "license": "MIT"
 }
